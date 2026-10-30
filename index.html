@@ -55,8 +55,8 @@
       <thead>
         <tr>
           <th>Player</th>
-          <th>Team</th>
-          <th class="pts">Goals</th>
+          <th class="num">Goals</th>
+          <th class="num">Apps</th>
         </tr>
       </thead>
       <tbody><tr><td colspan="3">Loading scorers...</td></tr></tbody>
@@ -105,11 +105,29 @@
       tbody.innerHTML = `<tr><td colspan="3">No goals logged yet.</td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(r => `
+  
+    // Normalize row data into numbers
+    const cleaned = rows
+      .map(r => ({
+        player: r.Player || r.player || "-",
+        goals: Number(r.Goals || r.goals || 0),
+        apps: Number(r.Apps || r.apps || 0)
+      }))
+      .filter(r => r.player !== "-" && r.goals > 0);
+  
+    // Tiebreaker sort: Most goals first; if tied, FEWEST appearances first
+    cleaned.sort((a, b) => {
+      if (b.goals !== a.goals) {
+        return b.goals - a.goals; // Primary: Goals Descending
+      }
+      return a.apps - b.apps;     // Tiebreaker: Apps Ascending (fewer apps = higher rank)
+    });
+  
+    tbody.innerHTML = cleaned.map(r => `
       <tr>
-        <td>${r.Player || r.player || "-"}</td>
-        <td>${r.Team || r.team || "-"}</td>
-        <td class="pts">${r.Goals || r.goals || 0}</td>
+        <td><strong>${r.player}</strong></td>
+        <td class="pts">${r.goals}</td>
+        <td class="num">${r.apps}</td>
       </tr>
     `).join("");
   }
