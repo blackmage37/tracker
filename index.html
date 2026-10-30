@@ -47,6 +47,8 @@
       </thead>
       <tbody><tr><td colspan="7">Loading standings...</td></tr></tbody>
     </table>
+    <!-- Tiebreaker note container -->
+    <p id="tiebreakerRule" style="font-size: 0.78rem; color: var(--muted); margin-top: 12px; margin-bottom: 0; line-height: 1.4;"></p>
   </div>
 
   <div class="card">
@@ -74,6 +76,12 @@
       if (data.status === "success") {
         renderLeague(data.league);
         renderRank(data.rank);
+
+        // Display the tiebreaker rule if returned from the Sheet
+        const ruleEl = document.getElementById("tiebreakerRule");
+        if (data.tiebreakerNote) {
+          ruleEl.innerText = "ℹ️ " + data.tiebreakerNote;
+        }
       }
     } catch (e) {
       console.error("Failed to load tables:", e);
