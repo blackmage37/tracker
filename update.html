@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football League Tracker</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d30;
+      --border: #232f48;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); margin: 0; padding: 12px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    h2, h3 { margin: 0 0 10px 0; font-size: 1.1rem; }
+    label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px; }
+    input, select, button {
+      width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: #0b0f19; color: var(--text); font-size: 0.95rem; margin-bottom: 10px;
+    }
+    .pool { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chip {
+      background: #1e293b; border: 1px solid var(--border); border-radius: 20px;
+      padding: 6px 12px; font-size: 0.85rem; cursor: pointer; user-select: none;
+    }
+    .chip:active { transform: scale(0.96); }
+    .chip.red { border-color: var(--red); background: rgba(239, 68, 68, 0.15); }
+    .chip.blue { border-color: var(--blue); background: rgba(59, 130, 246, 0.15); }
+    
+    .team-col { display: flex; flex-direction: column; gap: 8px; }
+    .player-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #0e1526; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+    }
+    .stepper { display: flex; align-items: center; gap: 8px; }
+    .stepper button { width: 28px; height: 28px; padding: 0; margin: 0; font-weight: bold; }
+    .score-banner {
+      display: flex; justify-content: space-around; align-items: center;
+      background: #1e293b; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 1.3rem; font-weight: 800;
+    }
+    .score-red { color: var(--red); }
+    .score-blue { color: var(--blue); }
+    .submit-btn { background: #10b981; color: #000; font-weight: bold; border: none; padding: 12px; margin-top: 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>⚽ Log Weekly Match</h2>
+
+  <!-- UNASSIGNED PLAYER POOL -->
+  <div class="card">
+    <label>Tap Player to Assign</label>
+    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+      <button type="button" id="targetRedBtn" style="background: var(--red); color: white; padding: 6px; margin: 0;" onclick="setTargetTeam('Red')">Assigning to: RED</button>
+      <button type="button" id="targetBlueBtn" style="background: #1e293b; color: white; padding: 6px; margin: 0;" onclick="setTargetTeam('Blue')">Assigning to: BLUE</button>
+    </div>
+    <div class="pool" id="playerPool">Loading player list...</div>
+  </div>
+
+  <form onsubmit="handleFormSubmit(event)">
+    <!-- MATCH METRICS -->
+    <div class="card">
+      <label>Match Date</label>
+      <input type="date" id="matchDate" required>
+
+      <div class="score-banner">
+        <span class="score-red" id="displayRedScore">RED: 0</span>
+        <span style="color: var(--muted);">-</span>
+        <span class="score-blue" id="displayBlueScore">BLUE: 0</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <!-- RED TEAM COLUMN -->
+        <div class="team-col">
+          <label style="color: var(--red);">Red Captain</label>
+          <select id="redCaptainSelect" required><option value="">Select Captain</option></select>
+          <label>Red Squad & Goals</label>
+          <div id="redSquadList"></div>
+        </div>
+
+        <!-- BLUE TEAM COLUMN -->
+        <div class="team-col">
+          <label style="color: var(--blue);">Blue Captain</label>
+          <select id="blueCaptainSelect" required><option value="">Select Captain</option></select>
+          <label>Blue Squad & Goals</label>
+          <div id="blueSquadList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Passkey</label>
+      <input type="password" id="passkey" placeholder="Enter your passkey" required>
+      <button type="submit" class="submit-btn" id="saveBtn">Submit Match</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9ivt59JuMd-Wcso53XiYQtPUE1uPjAWxDlMC5OxwPSQC_l6KT0os59yxdzlPYBug4BA/exec";
+
+  let masterPlayers = [];
+  let currentTarget = "Red";
+  let state = {
+    Red: {},   // { "Dave": { goals: 0 }, "Alex": { goals: 1 } }
+    Blue: {}
+  };
+
+  document.getElementById("matchDate").value = new Date().toISOString().split('T')[0];
+
+  function setTargetTeam(team) {
+    currentTarget = team;
+    document.getElementById("targetRedBtn").style.background = team === "Red" ? "var(--red)" : "#1e293b";
+    document.getElementById("targetBlueBtn").style.background = team === "Blue" ? "var(--blue)" : "#1e293b";
+  }
+
+  async function loadInitialRoster() {
+    try {
+      const res = await fetch(SCRIPT_URL + "?action=get_public_data");
+      const data = await res.json();
+      if (data.rosterPool && data.rosterPool.length > 0) {
+        masterPlayers = data.rosterPool;
+      } else {
+        // Fallback demo pool if spreadsheet has no data yet
+        masterPlayers = ["There", "Are", "No", "Players", "In", "Google", "Sheets"];
+      }
+      renderPool();
+    } catch (e) {
+      masterPlayers = ["There", "Are", "No", "Players", "In", "Google", "Sheets"];
+      renderPool();
+    }
+  }
+  loadInitialRoster();
+
+  function renderPool() {
+    const poolEl = document.getElementById("playerPool");
+    poolEl.innerHTML = "";
+
+    masterPlayers.forEach(name => {
+      const inRed = !!state.Red[name];
+      const inBlue = !!state.Blue[name];
+
+      const chip = document.createElement("div");
+      chip.className = `chip ${inRed ? "red" : ""} ${inBlue ? "blue" : ""}`;
+      chip.innerText = name;
+
+      chip.onclick = () => {
+        if (inRed) {
+          delete state.Red[name];
+        } else if (inBlue) {
+          delete state.Blue[name];
+        } else {
+          state[currentTarget][name] = { goals: 0 };
+        }
+        renderPool();
+        renderSquads();
+      };
+
+      poolEl.appendChild(chip);
+    });
+  }
+
+  function renderSquads() {
+    ["Red", "Blue"].forEach(team => {
+      const container = document.getElementById(`${team.toLowerCase()}SquadList`);
+      const captainSelect = document.getElementById(`${team.toLowerCase()}CaptainSelect`);
+      const currentSelectedCap = captainSelect.value;
+      
+      container.innerHTML = "";
+      captainSelect.innerHTML = `<option value="">Select Captain</option>`;
+
+      Object.keys(state[team]).forEach(player => {
+        // Populate captain dropdown
+        const opt = document.createElement("option");
+        opt.value = player;
+        opt.innerText = player;
+        if (player === currentSelectedCap) opt.selected = true;
+        captainSelect.appendChild(opt);
+
+        // Populate squad member item with goal counters
+        const row = document.createElement("div");
+        row.className = "player-row";
+        row.innerHTML = `
+          <span>${player}</span>
+          <div class="stepper">
+            <button type="button" onclick="modifyGoal('${team}', '${player}', -1)">-</button>
+            <span>${state[team][player].goals}</span>
+            <button type="button" onclick="modifyGoal('${team}', '${player}', 1)">+</button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    });
+
+    updateScores();
+  }
+
+  function modifyGoal(team, player, delta) {
+    const nextVal = (state[team][player].goals || 0) + delta;
+    if (nextVal >= 0) {
+      state[team][player].goals = nextVal;
+      renderSquads();
+    }
+  }
+
+  function updateScores() {
+    const redTotal = Object.values(state.Red).reduce((sum, p) => sum + p.goals, 0);
+    const blueTotal = Object.values(state.Blue).reduce((sum, p) => sum + p.goals, 0);
+
+    document.getElementById("displayRedScore").innerText = `RED: ${redTotal}`;
+    document.getElementById("displayBlueScore").innerText = `BLUE: ${blueTotal}`;
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+
+    const redCap = document.getElementById("redCaptainSelect").value;
+    const blueCap = document.getElementById("blueCaptainSelect").value;
+
+    if (!redCap || !blueCap) {
+      alert("Please designate a captain for both teams.");
+      return;
+    }
+
+    // Format rosters into lines for backend compatibility
+    const redRosterText = Object.keys(state.Red).join("\n");
+    const blueRosterText = Object.keys(state.Blue).join("\n");
+
+    // Format goals into "Player Goals" format
+    const redScorersText = Object.entries(state.Red)
+      .filter(([_, data]) => data.goals > 0)
+      .map(([player, data]) => `${player} ${data.goals}`)
+      .join("\n");
+
+    const blueScorersText = Object.entries(state.Blue)
+      .filter(([_, data]) => data.goals > 0)
+      .map(([player, data]) => `${player} ${data.goals}`)
+      .join("\n");
+
+    const payload = {
+      action: "submit_match",
+      matchDate: document.getElementById("matchDate").value,
+      redCaptain: redCap,
+      blueCaptain: blueCap,
+      redScore: Object.values(state.Red).reduce((sum, p) => sum + p.goals, 0),
+      blueScore: Object.values(state.Blue).reduce((sum, p) => sum + p.goals, 0),
+      redRoster: redRosterText,
+      blueRoster: blueRosterText,
+      redScorers: redScorersText,
+      blueScorers: blueScorersText,
+      passkey: document.getElementById("passkey").value,
+      userAgent: navigator.userAgent
+    };
+
+    const saveBtn = document.getElementById("saveBtn");
+    saveBtn.disabled = true;
+    saveBtn.innerText = "Submitting...";
+
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      alert(result.message);
+      if (result.status === "success") {
+        state = { Red: {}, Blue: {} };
+        renderPool();
+        renderSquads();
+      }
+    } catch (err) {
+      alert("Submission error: " + err.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerText = "Submit Match";
+    }
+  }
+</script>
+</body>
+</html>
