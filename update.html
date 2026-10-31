@@ -125,7 +125,7 @@
 
   async function loadInitialRoster() {
     try {
-      const res = await fetch(SCRIPT_URL + "?action=get_public_data");
+      const res = await fetch(SCRIPT_URL + "?action=get_roster_pool");
       const data = await res.json();
       if (data.rosterPool && data.rosterPool.length > 0) {
         masterPlayers = data.rosterPool;
