@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Referee Live Match Mode</title>
+  <style>
+    :root {
+      --bg: #0b0f19; --card: #151d30; --border: #232f48;
+      --accent: #10b981; --text: #f8fafc; --muted: #94a3b8;
+      --red-team: #ef4444; --blue-team: #3b82f6;
+      --card-yellow: #facc15; --card-red: #dc2626;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); margin: 0; padding: 14px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 14px; padding-bottom: 40px; }
+    
+    /* Top Bar & Card Triggers */
+    .top-bar { display: flex; justify-content: space-between; align-items: center; }
+    .back-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 600; }
+    .card-toggles { display: flex; gap: 8px; }
+    .btn-card-trigger { border: none; border-radius: 8px; padding: 8px 14px; font-weight: 800; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+    .trigger-yellow { background: var(--card-yellow); color: #000; }
+    .trigger-red { background: var(--card-red); color: #fff; }
+
+    /* Fullscreen Card Overlay */
+    #cardOverlay {
+      position: fixed; inset: 0; z-index: 9999; display: none;
+      flex-direction: column; justify-content: flex-end; align-items: center;
+      padding-bottom: 48px; cursor: pointer; user-select: none;
+    }
+    #cardOverlay span {
+      background: rgba(0, 0, 0, 0.35); color: #fff; padding: 8px 18px;
+      border-radius: 20px; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px;
+    }
+
+    /* Standard UI Cards */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    h2, h3 { margin: 0 0 10px 0; font-size: 1.1rem; }
+    label { display: block; font-size: 0.75rem; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
+    input, select, button.primary { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: #0b0f19; color: var(--text); font-size: 0.95rem; margin-bottom: 10px; }
+    button.primary { background: var(--accent); color: #000; font-weight: 800; border: none; cursor: pointer; margin-top: 4px; }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Setup Roster Pool */
+    .pool { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chip { background: #1e293b; border: 1px solid var(--border); padding: 6px 10px; border-radius: 16px; font-size: 0.85rem; cursor: pointer; }
+    .chip.assigned-red { background: rgba(239, 68, 68, 0.2); border-color: var(--red-team); color: #fca5a5; }
+    .chip.assigned-blue { background: rgba(59, 130, 246, 0.2); border-color: var(--blue-team); color: #93c5fd; }
+    .assign-mode { display: flex; gap: 8px; margin-bottom: 10px; }
+    .mode-btn { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: #0b0f19; color: var(--muted); font-weight: 700; cursor: pointer; }
+    .mode-btn.active-red { border-color: var(--red-team); color: var(--red-team); background: rgba(239, 68, 68, 0.1); }
+    .mode-btn.active-blue { border-color: var(--blue-team); color: var(--blue-team); background: rgba(59, 130, 246, 0.1); }
+
+    /* Live Scoreboard */
+    .scoreboard { display: flex; justify-content: space-between; align-items: center; text-align: center; background: #0b0f19; padding: 14px; border-radius: 10px; border: 1px solid var(--border); }
+    .team-box { flex: 1; }
+    .team-name { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
+    .score-num { font-size: 2.4rem; font-weight: 900; line-height: 1.1; margin: 4px 0; }
+    .live-badge { background: rgba(16, 185, 129, 0.15); color: var(--accent); padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px; }
+
+    /* Live Player Action Rows */
+    .player-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1e293b; }
+    .player-row:last-child { border-bottom: none; }
+    .p-info { font-weight: 600; font-size: 0.95rem; }
+    .p-stats { font-size: 0.8rem; color: var(--muted); margin-left: 6px; }
+    .p-actions { display: flex; gap: 6px; }
+    .act-btn { border: none; border-radius: 6px; padding: 6px 10px; font-weight: 700; font-size: 0.8rem; cursor: pointer; }
+    .act-goal { background: #1e293b; color: var(--accent); border: 1px solid var(--accent); }
+    .act-yel { background: var(--card-yellow); color: #000; }
+    .act-red { background: var(--card-red); color: #fff; }
+
+    /* Event Log & Sync Status */
+    .sync-bar { font-size: 0.8rem; color: var(--muted); text-align: center; min-height: 18px; }
+    .feed { max-height: 140px; overflow-y: auto; font-size: 0.82rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+    .btn-end { background: #334155; color: #fff; border: 1px solid #475569; padding: 12px; border-radius: 8px; width: 100%; font-weight: 700; cursor: pointer; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<!-- FULLSCREEN CARD OVERLAY -->
+<div id="cardOverlay" onclick="hideCardOverlay()">
+  <span>Tap anywhere to dismiss</span>
+</div>
+
+<div class="container">
+  <!-- TOP NAVIGATION & INSTANT CARD BUTTONS -->
+  <div class="top-bar">
+    <a href="index.html" class="back-link">← Standings</a>
+    <div class="card-toggles">
+      <button class="btn-card-trigger trigger-yellow" onclick="showCardOverlay('yellow')">🟨 Yellow</button>
+      <button class="btn-card-trigger trigger-red" onclick="showCardOverlay('red')">🟥 Red</button>
+    </div>
+  </div>
+
+  <!-- STAGE 1: PRE-MATCH SETUP -->
+  <div id="setupSection" class="card">
+    <h2>⏱️ Start Live Match</h2>
+    <label>Your Passkey</label>
+    <input type="password" id="passkey" placeholder="Enter referee/player passkey">
+
+    <label>Match Date</label>
+    <input type="date" id="matchDate">
+
+    <label>Tap Players to Assign Teams</label>
+    <div class="assign-mode">
+      <button type="button" id="btnModeRed" class="mode-btn active-red" onclick="setAssignTeam('Red')">Assigning: 🔴 Red</button>
+      <button type="button" id="btnModeBlue" class="mode-btn" onclick="setAssignTeam('Blue')">Assigning: 🔵 Blue</button>
+    </div>
+
+    <div id="playerPool" class="pool">Loading active roster...</div>
+
+    <div style="display: flex; gap: 10px;">
+      <div style="flex: 1;">
+        <label>Red Captain</label>
+        <select id="redCaptain"></select>
+      </div>
+      <div style="flex: 1;">
+        <label>Blue Captain</label>
+        <select id="blueCaptain"></select>
+      </div>
+    </div>
+
+    <button class="primary" id="startBtn" onclick="startLiveMatch()">Kick Off Match</button>
+  </div>
+
+  <!-- STAGE 2: LIVE PITCH CONSOLE -->
+  <div id="liveSection" style="display: none; flex-direction: column; gap: 14px;">
+    <div class="card">
+      <div class="scoreboard">
+        <div class="team-box">
+          <div class="team-name" style="color: var(--red-team);" id="dispRedCap">Red</div>
+          <div class="score-num" id="dispRedScore">0</div>
+        </div>
+        <div>
+          <span class="live-badge">● LIVE</span>
+        </div>
+        <div class="team-box">
+          <div class="team-name" style="color: var(--blue-team);" id="dispBlueCap">Blue</div>
+          <div class="score-num" id="dispBlueScore">0</div>
+        </div>
+      </div>
+      <div class="sync-bar" id="syncStatus" style="margin-top: 8px;">Ready for kick-off</div>
+    </div>
+
+    <!-- RED TEAM PITCH LIST -->
+    <div class="card" style="border-top: 3px solid var(--red-team);">
+      <h3 style="color: var(--red-team);">🔴 Red Team</h3>
+      <div id="liveRedList"></div>
+    </div>
+
+    <!-- BLUE TEAM PITCH LIST -->
+    <div class="card" style="border-top: 3px solid var(--blue-team);">
+      <h3 style="color: var(--blue-team);">🔵 Blue Team</h3>
+      <div id="liveBlueList"></div>
+    </div>
+
+    <!-- LIVE EVENT FEED -->
+    <div class="card">
+      <h3>Match Timeline</h3>
+      <div id="eventFeed" class="feed"><div>Match started.</div></div>
+      <button class="btn-end" id="endBtn" onclick="endLiveMatch()">🏁 Full Time (Save & Verify)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9ivt59JuMd-Wcso53XiYQtPUE1uPjAWxDlMC5OxwPSQC_l6KT0os59yxdzlPYBug4BA/exec";
+
+  let masterPlayers = [];
+  let assignTarget = "Red";
+  let redRoster = [];
+  let blueRoster = [];
+
+  // Live Match State
+  let activeMatchId = "";
+  let activePasskey = "";
+  let redScore = 0;
+  let blueScore = 0;
+  let playerStats = {}; // { "Alex": { goals: 0, yellow: 0, red: 0 } }
+
+  // Set default date to today
+  document.getElementById("matchDate").valueAsDate = new Date();
+
+  // --- FULLSCREEN CARD OVERLAYS ---
+  function showCardOverlay(color) {
+    const overlay = document.getElementById("cardOverlay");
+    overlay.style.backgroundColor = (color === "yellow") ? "#facc15" : "#dc2626";
+    overlay.style.display = "flex";
+  }
+
+  function hideCardOverlay() {
+    document.getElementById("cardOverlay").style.display = "none";
+  }
+
+  // --- LOAD ROSTER ---
+  async function loadRoster() {
+    try {
+      const res = await fetch(`${SCRIPT_URL}?action=get_roster_pool`);
+      const data = await res.json();
+      if (data.status === "success" && data.rosterPool) {
+        masterPlayers = data.rosterPool;
+        renderPool();
+      }
+    } catch (e) {
+      document.getElementById("playerPool").innerText = "Error loading players: " + e.message;
+    }
+  }
+
+  function setAssignTeam(team) {
+    assignTarget = team;
+    document.getElementById("btnModeRed").className = team === "Red" ? "mode-btn active-red" : "mode-btn";
+    document.getElementById("btnModeBlue").className = team === "Blue" ? "mode-btn active-blue" : "mode-btn";
+  }
+
+  function togglePlayer(name) {
+    const inRed = redRoster.indexOf(name);
+    const inBlue = blueRoster.indexOf(name);
+
+    if (assignTarget === "Red") {
+      if (inRed > -1) redRoster.splice(inRed, 1);
+      else {
+        if (inBlue > -1) blueRoster.splice(inBlue, 1);
+        redRoster.push(name);
+      }
+    } else {
+      if (inBlue > -1) blueRoster.splice(inBlue, 1);
+      else {
+        if (inRed > -1) redRoster.splice(inRed, 1);
+        blueRoster.push(name);
+      }
+    }
+    renderPool();
+    updateCaptainDropdowns();
+  }
+
+  function renderPool() {
+    const pool = document.getElementById("playerPool");
+    pool.innerHTML = masterPlayers.map(p => {
+      let cls = "chip";
+      if (redRoster.includes(p)) cls += " assigned-red";
+      if (blueRoster.includes(p)) cls += " assigned-blue";
+      return `<div class="${cls}" onclick="togglePlayer('${p}')">${p}</div>`;
+    }).join("");
+  }
+
+  function updateCaptainDropdowns() {
+    const redSel = document.getElementById("redCaptain");
+    const blueSel = document.getElementById("blueCaptain");
+    redSel.innerHTML = redRoster.map(p => `<option value="${p}">${p}</option>`).join("");
+    blueSel.innerHTML = blueRoster.map(p => `<option value="${p}">${p}</option>`).join("");
+  }
+
+  // --- START LIVE MATCH ---
+  async function startLiveMatch() {
+    const passkey = document.getElementById("passkey").value.trim();
+    const matchDate = document.getElementById("matchDate").value;
+    const redCap = document.getElementById("redCaptain").value;
+    const blueCap = document.getElementById("blueCaptain").value;
+
+    if (!passkey) return alert("Enter your passkey.");
+    if (redRoster.length === 0 || blueRoster.length === 0) return alert("Assign at least one player to both teams.");
+
+    const btn = document.getElementById("startBtn");
+    btn.disabled = true;
+    btn.innerText = "Creating live match...";
+
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "start_live_match",
+          passkey: passkey,
+          matchDate: matchDate,
+          redCaptain: redCap,
+          blueCaptain: blueCap,
+          redPlayers: redRoster,
+          bluePlayers: blueRoster
+        })
+      });
+      const data = await res.json();
+
+      if (data.status === "success") {
+        activeMatchId = data.matchId;
+        activePasskey = passkey;
+        
+        // Initialize local tracking
+        [...redRoster, ...blueRoster].forEach(p => {
+          playerStats[p] = { goals: 0, yellow: 0, red: 0 };
+        });
+
+        document.getElementById("dispRedCap").innerText = `Red (${redCap})`;
+        document.getElementById("dispBlueCap").innerText = `Blue (${blueCap})`;
+        document.getElementById("setupSection").style.display = "none";
+        document.getElementById("liveSection").style.display = "flex";
+        renderLiveRosters();
+      } else {
+        alert(data.message);
+      }
+    } catch (e) {
+      alert("Error starting match: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "Kick Off Match";
+    }
+  }
+
+  // --- RENDER PITCH CONTROLS ---
+  function renderLiveRosters() {
+    document.getElementById("liveRedList").innerHTML = redRoster.map(p => buildPlayerRow(p, "Red")).join("");
+    document.getElementById("liveBlueList").innerHTML = blueRoster.map(p => buildPlayerRow(p, "Blue")).join("");
+  }
+
+  function buildPlayerRow(player, team) {
+    const st = playerStats[player];
+    let badges = "";
+    if (st.goals > 0) badges += `⚽×${st.goals} `;
+    if (st.yellow > 0) badges += `🟨×${st.yellow} `;
+    if (st.red > 0) badges += `🟥 `;
+
+    return `
+      <div class="player-row">
+        <div>
+          <span class="p-info">${player}</span>
+          <span class="p-stats">${badges}</span>
+        </div>
+        <div class="p-actions">
+          <button class="act-btn act-goal" onclick="recordEvent('${team}', '${player}', 'GOAL')">+⚽</button>
+          <button class="act-btn act-yel" onclick="recordEvent('${team}', '${player}', 'CARD', 'Yellow')">🟨</button>
+          <button class="act-btn act-red" onclick="recordEvent('${team}', '${player}', 'CARD', 'Red')">🟥</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- REAL-TIME EVENT SYNC ---
+  async function recordEvent(team, player, eventType, cardColor = "") {
+    // 1. Optimistic UI update so the ref isn't waiting on network lag
+    if (eventType === "GOAL") {
+      if (team === "Red") redScore++;
+      else blueScore++;
+      playerStats[player].goals++;
+      document.getElementById("dispRedScore").innerText = redScore;
+      document.getElementById("dispBlueScore").innerText = blueScore;
+      addFeedItem(`⚽ GOAL — ${player} (${team})`);
+    } else if (eventType === "CARD") {
+      if (cardColor === "Yellow") playerStats[player].yellow++;
+      if (cardColor === "Red") playerStats[player].red++;
+      addFeedItem(`${cardColor === "Yellow" ? "🟨" : "🟥"} ${cardColor} Card — ${player} (${team})`);
+      
+      // Auto-trigger the fullscreen card flash when booked
+      showCardOverlay(cardColor.toLowerCase());
+    }
+
+    renderLiveRosters();
+    const syncEl = document.getElementById("syncStatus");
+    syncEl.innerText = "⏳ Syncing to Google Sheets...";
+    syncEl.style.color = "#f59e0b";
+
+    // 2. Push to Google Sheets in background
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "log_live_event",
+          passkey: activePasskey,
+          matchId: activeMatchId,
+          team: team,
+          player: player,
+          eventType: eventType,
+          cardColor: cardColor
+        })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        syncEl.innerText = "✓ Synced to Sheet";
+        syncEl.style.color = "#10b981";
+      } else {
+        syncEl.innerText = "⚠️ Sync warning: " + data.message;
+        syncEl.style.color = "#ef4444";
+      }
+    } catch (e) {
+      syncEl.innerText = "⚠️ Network error saving event";
+      syncEl.style.color = "#ef4444";
+    }
+  }
+
+  function addFeedItem(text) {
+    const feed = document.getElementById("eventFeed");
+    const div = document.createElement("div");
+    div.innerText = text;
+    feed.prepend(div);
+  }
+
+  // --- END MATCH ---
+  async function endLiveMatch() {
+    if (!confirm(`End match at Red ${redScore} - ${blueScore} Blue and publish to standings?`)) return;
+
+    const btn = document.getElementById("endBtn");
+    btn.disabled = true;
+    btn.innerText = "Finalizing match...";
+
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "end_live_match",
+          passkey: activePasskey,
+          matchId: activeMatchId
+        })
+      });
+      const data = await res.json();
+      alert(data.message);
+      window.location.href = "index.html";
+    } catch (e) {
+      alert("Error ending match: " + e.message);
+      btn.disabled = false;
+      btn.innerText = "🏁 Full Time (Save & Verify)";
+    }
+  }
+
+  loadRoster();
+</script>
+</body>
+</html>
