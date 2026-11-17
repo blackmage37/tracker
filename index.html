@@ -3,72 +3,158 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>⚽ Football League - Standings</title>
+  <title>Soccer League - Standings & Results</title>
   <style>
-    :root { --bg: #0b0f19; --card: #151d30; --border: #232f48; --accent: #10b981; --text: #f8fafc; --muted: #94a3b8; }
+    :root {
+      --bg: #0b0f19; --card: #151d30; --border: #232f48;
+      --accent: #10b981; --text: #f8fafc; --muted: #94a3b8;
+      --red-team: #ef4444; --blue-team: #3b82f6;
+    }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); margin: 0; padding: 16px; display: flex; justify-content: center; }
     .container { width: 100%; max-width: 650px; display: flex; flex-direction: column; gap: 16px; }
-    .nav { display: flex; gap: 10px; margin-bottom: 4px; }
-    .nav a { flex: 1; text-align: center; text-decoration: none; padding: 10px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; }
-    .btn-update { background: var(--accent); color: #000; }
-    .btn-verify { background: #334155; color: var(--text); border: 1px solid var(--border); }
+    
+    /* 2x2 Responsive Nav Grid */
+    .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .nav-btn {
+      text-align: center; text-decoration: none; padding: 11px 8px;
+      border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer;
+      border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-log { background: var(--accent); color: #000; border: none; }
+    .btn-live { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.4); }
+    .btn-results { background: #1e293b; color: var(--text); }
+    .btn-results.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+    .btn-verify { background: #1e293b; color: var(--muted); }
+
+    /* Cards & Tables */
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; overflow-x: auto; }
-    h2, h3 { margin: 0 0 12px 0; font-size: 1.15rem; }
+    h3 { margin: 0 0 12px 0; font-size: 1.15rem; }
     table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
     th { color: var(--muted); padding: 8px 6px; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; }
     td { padding: 10px 6px; border-bottom: 1px solid #1c2438; }
     tr:last-child td { border-bottom: none; }
     .num { text-align: center; }
     .pts { font-weight: bold; color: var(--accent); text-align: center; }
+
+    /* Match Results List */
+    .match-item {
+      background: #0f1523; border: 1px solid var(--border); border-radius: 10px;
+      margin-bottom: 10px; overflow: hidden;
+    }
+    .match-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; cursor: pointer; user-select: none; gap: 8px;
+    }
+    .match-date { font-size: 0.78rem; color: var(--muted); font-weight: 600; min-width: 78px; }
+    .match-scoreline {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 10px; font-size: 0.98rem; font-weight: 700;
+    }
+    .cap-red { color: var(--red-team); text-align: right; flex: 1; }
+    .cap-blue { color: var(--blue-team); text-align: left; flex: 1; }
+    .score-pill {
+      background: #1e293b; padding: 4px 10px; border-radius: 6px;
+      font-weight: 900; letter-spacing: 0.5px; white-space: nowrap;
+    }
+    .expand-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; }
+    .match-item.open .expand-icon { transform: rotate(180deg); }
+
+    /* Expandable Details Drawer */
+    .match-details {
+      display: none; padding: 10px 14px 14px 14px; border-top: 1px solid #1c2438;
+      background: #131a2b; font-size: 0.85rem;
+    }
+    .match-item.open .match-details { display: block; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-col-red { border-right: 1px solid #1e293b; padding-right: 8px; text-align: right; }
+    .detail-col-blue { padding-left: 4px; text-align: left; }
+    .event-line { margin-bottom: 4px; color: #e2e8f0; }
+    .no-events { color: var(--muted); font-style: italic; font-size: 0.8rem; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <div class="nav">
-    <a href="update.html" class="btn-update">➕ Log Match</a>
-    <a href="verify.html" class="btn-verify">🛡️ Admin Verify</a>
+  <!-- TOP NAVIGATION -->
+  <div class="nav-grid">
+    <a href="update.html" class="nav-btn btn-log">➕ Log Match</a>
+    <a href="live.html" class="nav-btn btn-live">⏱️ Log Live Match</a>
+    <button id="toggleViewBtn" class="nav-btn btn-results" onclick="toggleMainView()">📋 View Results</button>
+    <a href="verify.html" class="nav-btn btn-verify">🛡️ Admin Verify</a>
   </div>
 
-  <div class="card">
-    <h3>🏆 Captain Standings</h3>
-    <table id="leagueTable">
-      <thead>
-        <tr>
-          <th>Captain</th>
-          <th class="num">P</th>
-          <th class="num">W</th>
-          <th class="num">D</th>
-          <th class="num">L</th>
-          <th class="num">GD</th>
-          <th class="pts">Pts</th>
-        </tr>
-      </thead>
-      <tbody><tr><td colspan="7">Loading standings...</td></tr></tbody>
-    </table>
-    <!-- Tiebreaker note container -->
-    <p id="tiebreakerRule" style="font-size: 0.78rem; color: var(--muted); margin-top: 12px; margin-bottom: 0; line-height: 1.4;"></p>
+  <!-- VIEW 1: STANDINGS & GOLDEN BOOT -->
+  <div id="standingsView" style="display: flex; flex-direction: column; gap: 16px;">
+    <div class="card">
+      <h3>🏆 Captain Standings</h3>
+      <table id="leagueTable">
+        <thead>
+          <tr>
+            <th>Captain</th>
+            <th class="num">P</th>
+            <th class="num">W</th>
+            <th class="num">D</th>
+            <th class="num">L</th>
+            <th class="num">GD</th>
+            <th class="pts">Pts</th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="7">Loading standings...</td></tr></tbody>
+      </table>
+      <p id="tiebreakerRule" style="font-size: 0.78rem; color: var(--muted); margin-top: 12px; margin-bottom: 0; line-height: 1.4;"></p>
+    </div>
+
+    <div class="card">
+      <h3>⚽ Golden Boot (Top Scorers)</h3>
+      <table id="rankTable">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th class="num">Goals</th>
+            <th class="num">Apps</th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="3">Loading scorers...</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
-  <div class="card">
-    <h3>👟 Golden Boot</h3>
-    <table id="rankTable">
-      <thead>
-        <tr>
-          <th>Player</th>
-          <th class="num">Goals</th>
-          <th class="num">Apps</th>
-        </tr>
-      </thead>
-      <tbody><tr><td colspan="3">Loading scorers...</td></tr></tbody>
-    </table>
+  <!-- VIEW 2: MATCH RESULTS HISTORY -->
+  <div id="resultsView" class="card" style="display: none;">
+    <h3>📋 Match Results</h3>
+    <div id="resultsContainer">Loading match history...</div>
   </div>
 </div>
 
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9ivt59JuMd-Wcso53XiYQtPUE1uPjAWxDlMC5OxwPSQC_l6KT0os59yxdzlPYBug4BA/exec";
+  let currentView = "standings";
+  let resultsLoaded = false;
 
+  // --- VIEW SWITCHER ---
+  function toggleMainView() {
+    const standingsEl = document.getElementById("standingsView");
+    const resultsEl = document.getElementById("resultsView");
+    const btn = document.getElementById("toggleViewBtn");
+
+    if (currentView === "standings") {
+      currentView = "results";
+      standingsEl.style.display = "none";
+      resultsEl.style.display = "block";
+      btn.innerText = "🏆 View Standings";
+      btn.classList.add("active");
+      if (!resultsLoaded) loadMatchHistory();
+    } else {
+      currentView = "standings";
+      resultsEl.style.display = "none";
+      standingsEl.style.display = "flex";
+      btn.innerText = "📋 View Results";
+      btn.classList.remove("active");
+    }
+  }
+
+  // --- LOAD STANDINGS & SCORERS ---
   async function loadStandings() {
     try {
       const res = await fetch(`${SCRIPT_URL}?action=get_public_tables`);
@@ -77,7 +163,6 @@
         renderLeague(data.league);
         renderRank(data.rank);
 
-        // Display the tiebreaker rule if returned from the Sheet
         const ruleEl = document.getElementById("tiebreakerRule");
         if (data.tiebreakerNote) {
           ruleEl.innerText = "ℹ️ " + data.tiebreakerNote;
@@ -94,15 +179,37 @@
       tbody.innerHTML = `<tr><td colspan="7">No matches recorded yet.</td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(r => `
+
+    const cleaned = rows
+      .map(r => ({
+        captain: r.Captain || r.captain || "-",
+        p: Number(r.P || 0),
+        w: Number(r.W || 0),
+        d: Number(r.D || 0),
+        l: Number(r.L || 0),
+        gf: Number(r.GF || 0),
+        ga: Number(r.GA || 0),
+        gd: Number(r.GD || 0),
+        pts: Number(r.Pts || 0)
+      }))
+      .filter(r => r.captain !== "-");
+
+    cleaned.sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.gd !== a.gd) return b.gd - a.gd;
+      if (b.gf !== a.gf) return b.gf - a.gf;
+      return a.p - b.p;
+    });
+
+    tbody.innerHTML = cleaned.map(r => `
       <tr>
-        <td><strong>${r.Captain || r.captain || "-"}</strong></td>
-        <td class="num">${r.P || 0}</td>
-        <td class="num">${r.W || 0}</td>
-        <td class="num">${r.D || 0}</td>
-        <td class="num">${r.L || 0}</td>
-        <td class="num">${r.GD || 0}</td>
-        <td class="pts">${r.Pts || 0}</td>
+        <td><strong>${r.captain}</strong></td>
+        <td class="num">${r.p}</td>
+        <td class="num">${r.w}</td>
+        <td class="num">${r.d}</td>
+        <td class="num">${r.l}</td>
+        <td class="num">${r.gd}</td>
+        <td class="pts">${r.pts}</td>
       </tr>
     `).join("");
   }
@@ -113,8 +220,7 @@
       tbody.innerHTML = `<tr><td colspan="3">No goals logged yet.</td></tr>`;
       return;
     }
-  
-    // Normalize row data into numbers
+
     const cleaned = rows
       .map(r => ({
         player: r.Player || r.player || "-",
@@ -122,15 +228,12 @@
         apps: Number(r.Apps || r.apps || 0)
       }))
       .filter(r => r.player !== "-" && r.goals > 0);
-  
-    // Tiebreaker sort: Most goals first; if tied, FEWEST appearances first
+
     cleaned.sort((a, b) => {
-      if (b.goals !== a.goals) {
-        return b.goals - a.goals; // Primary: Goals Descending
-      }
-      return a.apps - b.apps;     // Tiebreaker: Apps Ascending (fewer apps = higher rank)
+      if (b.goals !== a.goals) return b.goals - a.goals;
+      return a.apps - b.apps;
     });
-  
+
     tbody.innerHTML = cleaned.map(r => `
       <tr>
         <td><strong>${r.player}</strong></td>
@@ -138,6 +241,78 @@
         <td class="num">${r.apps}</td>
       </tr>
     `).join("");
+  }
+
+  // --- LOAD MATCH RESULTS HISTORY ---
+  async function loadMatchHistory() {
+    const container = document.getElementById("resultsContainer");
+    try {
+      const res = await fetch(`${SCRIPT_URL}?action=get_match_history`);
+      const data = await res.json();
+
+      if (data.status === "success") {
+        resultsLoaded = true;
+        renderMatchHistory(data.matches);
+      } else {
+        container.innerHTML = `<p style="color:#ef4444;">${data.message}</p>`;
+      }
+    } catch (e) {
+      container.innerHTML = `<p style="color:#ef4444;">Failed to load match history: ${e.message}</p>`;
+    }
+  }
+
+  function renderMatchHistory(matches) {
+    const container = document.getElementById("resultsContainer");
+    if (!matches || matches.length === 0) {
+      container.innerHTML = `<p style="color:var(--muted);">No verified matches played yet.</p>`;
+      return;
+    }
+
+    container.innerHTML = matches.map((m, idx) => {
+      // Build Red side events (Goals + Bookings)
+      const redGoals = m.scorers.filter(s => s.team === "Red").map(s =>
+        `<div class="event-line">${s.player} ⚽${s.goals > 1 ? `×${s.goals}` : ""}</div>`
+      ).join("");
+      const redCards = m.bookings.filter(b => b.team === "Red").map(b =>
+        `<div class="event-line">${b.player} ${b.card === "Yellow" ? "🟨" : "🟥"}</div>`
+      ).join("");
+
+      // Build Blue side events (Goals + Bookings)
+      const blueGoals = m.scorers.filter(s => s.team === "Blue").map(s =>
+        `<div class="event-line">${s.player} ⚽${s.goals > 1 ? `×${s.goals}` : ""}</div>`
+      ).join("");
+      const blueCards = m.bookings.filter(b => b.team === "Blue").map(b =>
+        `<div class="event-line">${b.player} ${b.card === "Yellow" ? "🟨" : "🟥"}</div>`
+      ).join("");
+
+      const redContent = (redGoals + redCards) || `<div class="no-events">No events logged</div>`;
+      const blueContent = (blueGoals + blueCards) || `<div class="no-events">No events logged</div>`;
+
+      return `
+        <div class="match-item" id="match-${idx}">
+          <div class="match-header" onclick="toggleMatchDetails(${idx})">
+            <span class="match-date">${m.date}</span>
+            <div class="match-scoreline">
+              <span class="cap-red">${m.redCaptain}</span>
+              <span class="score-pill">${m.redScore} - ${m.blueScore}</span>
+              <span class="cap-blue">${m.blueCaptain}</span>
+            </div>
+            <span class="expand-icon">▼</span>
+          </div>
+          <div class="match-details">
+            <div class="detail-grid">
+              <div class="detail-col-red">${redContent}</div>
+              <div class="detail-col-blue">${blueContent}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function toggleMatchDetails(idx) {
+    const item = document.getElementById(`match-${idx}`);
+    if (item) item.classList.toggle("open");
   }
 
   loadStandings();
