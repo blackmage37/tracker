@@ -52,12 +52,18 @@
     .mode-btn.active-red { border-color: var(--red-team); color: var(--red-team); background: rgba(239, 68, 68, 0.1); }
     .mode-btn.active-blue { border-color: var(--blue-team); color: var(--blue-team); background: rgba(59, 130, 246, 0.1); }
 
-    /* Live Scoreboard */
+    /* Live Scoreboard & Timer */
     .scoreboard { display: flex; justify-content: space-between; align-items: center; text-align: center; background: #0b0f19; padding: 14px; border-radius: 10px; border: 1px solid var(--border); }
     .team-box { flex: 1; }
     .team-name { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
     .score-num { font-size: 2.4rem; font-weight: 900; line-height: 1.1; margin: 4px 0; }
-    .live-badge { background: rgba(16, 185, 129, 0.15); color: var(--accent); padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px; }
+    .timer-display { font-family: monospace; font-size: 1.35rem; font-weight: 800; color: var(--accent); background: rgba(16, 185, 129, 0.12); padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .timer-display.paused { color: #f59e0b; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); }
+
+    /* Kick Off / Final Whistle Button */
+    .btn-clock { width: 100%; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: 800; border: none; cursor: pointer; margin-top: 10px; transition: background 0.2s; }
+    .btn-kickoff { background: var(--accent); color: #000; }
+    .btn-whistle { background: #dc2626; color: #fff; }
 
     /* Live Player Action Rows */
     .player-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1e293b; }
@@ -72,8 +78,7 @@
 
     /* Event Log & Sync Status */
     .sync-bar { font-size: 0.8rem; color: var(--muted); text-align: center; min-height: 18px; }
-    .feed { max-height: 140px; overflow-y: auto; font-size: 0.82rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-    .btn-end { background: #334155; color: #fff; border: 1px solid #475569; padding: 12px; border-radius: 8px; width: 100%; font-weight: 700; cursor: pointer; margin-top: 8px; }
+    .feed { max-height: 160px; overflow-y: auto; font-size: 0.82rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
   </style>
 </head>
 <body>
@@ -95,7 +100,7 @@
 
   <!-- STAGE 1: PRE-MATCH SETUP -->
   <div id="setupSection" class="card">
-    <h2>⏱️ Start Live Match</h2>
+    <h2>⏱️ Set Up Live Match</h2>
     <label>Your Passkey</label>
     <input type="password" id="passkey" placeholder="Enter referee/player passkey">
 
@@ -121,7 +126,7 @@
       </div>
     </div>
 
-    <button class="primary" id="startBtn" onclick="startLiveMatch()">Kick Off Match</button>
+    <button class="primary" id="startBtn" onclick="createLiveMatch()">Load Pitch Console</button>
   </div>
 
   <!-- STAGE 2: LIVE PITCH CONSOLE -->
@@ -133,14 +138,18 @@
           <div class="score-num" id="dispRedScore">0</div>
         </div>
         <div>
-          <span class="live-badge">● LIVE</span>
+          <div id="matchClock" class="timer-display paused">00:00</div>
         </div>
         <div class="team-box">
           <div class="team-name" style="color: var(--blue-team);" id="dispBlueCap">Blue</div>
           <div class="score-num" id="dispBlueScore">0</div>
         </div>
       </div>
-      <div class="sync-bar" id="syncStatus" style="margin-top: 8px;">Ready for kick-off</div>
+
+      <!-- KICK OFF / FINAL WHISTLE TOGGLE BUTTON -->
+      <button id="clockToggleBtn" class="btn-clock btn-kickoff" onclick="handleClockToggle()">▶️ Kick Off</button>
+
+      <div class="sync-bar" id="syncStatus" style="margin-top: 8px;">Waiting for Kick Off...</div>
     </div>
 
     <!-- RED TEAM PITCH LIST -->
@@ -158,8 +167,7 @@
     <!-- LIVE EVENT FEED -->
     <div class="card">
       <h3>Match Timeline</h3>
-      <div id="eventFeed" class="feed"><div>Match started.</div></div>
-      <button class="btn-end" id="endBtn" onclick="endLiveMatch()">🏁 Full Time (Save & Verify)</button>
+      <div id="eventFeed" class="feed"><div>Teams loaded. Press Kick Off to start timer.</div></div>
     </div>
   </div>
 </div>
@@ -172,14 +180,15 @@
   let redRoster = [];
   let blueRoster = [];
 
-  // Live Match State
+  // Live Match & Timer State
   let activeMatchId = "";
   let activePasskey = "";
   let redScore = 0;
   let blueScore = 0;
-  let playerStats = {}; // { "Alex": { goals: 0, yellow: 0, red: 0 } }
+  let playerStats = {};
+  let kickOffTimestamp = null; // Epoch ms when Kick Off is pressed
+  let timerInterval = null;
 
-  // Set default date to today
   document.getElementById("matchDate").valueAsDate = new Date();
 
   // --- FULLSCREEN CARD OVERLAYS ---
@@ -245,14 +254,12 @@
   }
 
   function updateCaptainDropdowns() {
-    const redSel = document.getElementById("redCaptain");
-    const blueSel = document.getElementById("blueCaptain");
-    redSel.innerHTML = redRoster.map(p => `<option value="${p}">${p}</option>`).join("");
-    blueSel.innerHTML = blueRoster.map(p => `<option value="${p}">${p}</option>`).join("");
+    document.getElementById("redCaptain").innerHTML = redRoster.map(p => `<option value="${p}">${p}</option>`).join("");
+    document.getElementById("blueCaptain").innerHTML = blueRoster.map(p => `<option value="${p}">${p}</option>`).join("");
   }
 
-  // --- START LIVE MATCH ---
-  async function startLiveMatch() {
+  // --- CREATE LIVE MATCH RECORD ---
+  async function createLiveMatch() {
     const passkey = document.getElementById("passkey").value.trim();
     const matchDate = document.getElementById("matchDate").value;
     const redCap = document.getElementById("redCaptain").value;
@@ -263,7 +270,7 @@
 
     const btn = document.getElementById("startBtn");
     btn.disabled = true;
-    btn.innerText = "Creating live match...";
+    btn.innerText = "Preparing pitch...";
 
     try {
       const res = await fetch(SCRIPT_URL, {
@@ -285,7 +292,6 @@
         activeMatchId = data.matchId;
         activePasskey = passkey;
         
-        // Initialize local tracking
         [...redRoster, ...blueRoster].forEach(p => {
           playerStats[p] = { goals: 0, yellow: 0, red: 0 };
         });
@@ -302,8 +308,44 @@
       alert("Error starting match: " + e.message);
     } finally {
       btn.disabled = false;
-      btn.innerText = "Kick Off Match";
+      btn.innerText = "Load Pitch Console";
     }
+  }
+
+  // --- TIMER & KICK OFF / FINAL WHISTLE TOGGLE ---
+  function handleClockToggle() {
+    if (!kickOffTimestamp) {
+      // KICK OFF
+      kickOffTimestamp = Date.now();
+      const clockEl = document.getElementById("matchClock");
+      clockEl.classList.remove("paused");
+
+      const btn = document.getElementById("clockToggleBtn");
+      btn.innerText = "🏁 Final Whistle";
+      btn.className = "btn-clock btn-whistle";
+
+      document.getElementById("syncStatus").innerText = "Match in progress";
+      addFeedItem("▶️ KICK OFF — Timer started");
+
+      timerInterval = setInterval(updateClockDisplay, 1000);
+    } else {
+      // FINAL WHISTLE
+      endLiveMatch();
+    }
+  }
+
+  function updateClockDisplay() {
+    if (!kickOffTimestamp) return;
+    const elapsedSec = Math.floor((Date.now() - kickOffTimestamp) / 1000);
+    const mins = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
+    const secs = String(elapsedSec % 60).padStart(2, "0");
+    document.getElementById("matchClock").innerText = `${mins}:${secs}`;
+  }
+
+  function getCurrentMatchMinute() {
+    if (!kickOffTimestamp) return 0;
+    const elapsedMs = Date.now() - kickOffTimestamp;
+    return Math.floor(elapsedMs / 60000) + 1; // e.g. 0:00-0:59 = 1st min
   }
 
   // --- RENDER PITCH CONTROLS ---
@@ -336,20 +378,23 @@
 
   // --- REAL-TIME EVENT SYNC ---
   async function recordEvent(team, player, eventType, cardColor = "") {
-    // 1. Optimistic UI update so the ref isn't waiting on network lag
+    if (!kickOffTimestamp && eventType === "GOAL") {
+      if (!confirm("Timer hasn't kicked off yet (will log as 0'). Log goal anyway?")) return;
+    }
+
+    const currentMin = getCurrentMatchMinute();
+
     if (eventType === "GOAL") {
       if (team === "Red") redScore++;
       else blueScore++;
       playerStats[player].goals++;
       document.getElementById("dispRedScore").innerText = redScore;
       document.getElementById("dispBlueScore").innerText = blueScore;
-      addFeedItem(`⚽ GOAL — ${player} (${team})`);
+      addFeedItem(`⚽ ${currentMin}' GOAL — ${player} (${team})`);
     } else if (eventType === "CARD") {
       if (cardColor === "Yellow") playerStats[player].yellow++;
       if (cardColor === "Red") playerStats[player].red++;
-      addFeedItem(`${cardColor === "Yellow" ? "🟨" : "🟥"} ${cardColor} Card — ${player} (${team})`);
-      
-      // Auto-trigger the fullscreen card flash when booked
+      addFeedItem(`${cardColor === "Yellow" ? "🟨" : "🟥"} ${currentMin}' ${cardColor} Card — ${player} (${team})`);
       showCardOverlay(cardColor.toLowerCase());
     }
 
@@ -358,7 +403,6 @@
     syncEl.innerText = "⏳ Syncing to Google Sheets...";
     syncEl.style.color = "#f59e0b";
 
-    // 2. Push to Google Sheets in background
     try {
       const res = await fetch(SCRIPT_URL, {
         method: "POST",
@@ -370,7 +414,8 @@
           team: team,
           player: player,
           eventType: eventType,
-          cardColor: cardColor
+          cardColor: cardColor,
+          goalTime: currentMin
         })
       });
       const data = await res.json();
@@ -394,13 +439,17 @@
     feed.prepend(div);
   }
 
-  // --- END MATCH ---
+  // --- FINAL WHISTLE & SAVE ---
   async function endLiveMatch() {
-    if (!confirm(`End match at Red ${redScore} - ${blueScore} Blue and publish to standings?`)) return;
+    const elapsedMs = Date.now() - kickOffTimestamp;
+    const totalMinutes = Math.max(1, Math.round(elapsedMs / 60000));
 
-    const btn = document.getElementById("endBtn");
+    if (!confirm(`Blow Final Whistle at ${totalMinutes} mins (Red ${redScore} - ${blueScore} Blue) and publish to standings?`)) return;
+
+    clearInterval(timerInterval);
+    const btn = document.getElementById("clockToggleBtn");
     btn.disabled = true;
-    btn.innerText = "Finalizing match...";
+    btn.innerText = "Saving Final Result...";
 
     try {
       const res = await fetch(SCRIPT_URL, {
@@ -409,7 +458,8 @@
         body: JSON.stringify({
           action: "end_live_match",
           passkey: activePasskey,
-          matchId: activeMatchId
+          matchId: activeMatchId,
+          matchLength: totalMinutes
         })
       });
       const data = await res.json();
@@ -418,7 +468,7 @@
     } catch (e) {
       alert("Error ending match: " + e.message);
       btn.disabled = false;
-      btn.innerText = "🏁 Full Time (Save & Verify)";
+      btn.innerText = "🏁 Final Whistle";
     }
   }
 
